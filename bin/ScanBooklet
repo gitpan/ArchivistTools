@@ -1,0 +1,396 @@
+#!/usr/bin/perl -w
+#=============================== ScanBooklet =================================
+# Filename:  	       ScanBooklet
+# Description:         Program for scanning entire documents
+# Original Author:     Dale M. Amon
+# Revised by:          $Author: amon $ 
+# Date:                $Date: 2008-08-29 00:18:47 $ 
+# Version:             $Revision: 1.3 $
+# License:	       LGPL 2.1, Perl Artistic or BSD
+#
+#==============================================================================
+use strict;
+use Getopt::Long;
+use Pod::Usage;
+use Getopt::Std;
+use Term::ReadLine;
+use Term::ReadKey;
+use File::Spec;
+
+use Fault::Delegate::Stderr;
+use Fault::DebugPrinter;
+use Fault::Logger;
+
+use Scanner::Job;
+use Scanner::Device;
+use Scanner::Format;
+
+#=============================================================================
+#                   Logging, debugging and signal handling
+#=============================================================================
+my %opts;
+$::PROCESS_NAME = "ScanBooklet";
+$::DEBUG        = 0;
+
+sub done {
+  {local $SIG{'TERM'} = 'IGNORE'; kill 'TERM' => -$$;}
+  Fault::Logger->log ("Shutdown.","NOTE",'notice');
+  exit 1;
+}
+
+                Fault::DebugPrinter->new(0);
+my $delegate1 = Fault::Delegate::Stderr->new;
+my @delegates = ($delegate1);
+                 Fault::Logger->new (@delegates);
+
+$SIG{'INT'}  = \&done;
+$SIG{'TERM'} = \&done;
+
+#=============================================================================
+#                    Switch and argument handling
+#=============================================================================
+my ($HELP,$MAN,$DIAGNOSTIC_PRINT_LEVEL) = (0, 0, 0);
+
+my $SCANFORMAT          = "P:8.5x13";	# Default to A4 Portrait.
+my $FIRSTPAGE           = "001";
+my $Spine_Width_Inches  = 1.0;
+my $Total_Sheets	= 1;
+my $PageSource		= "Flatbed";
+my $Scanner             = undef;
+
+my $opts  = Getopt::Long::Parser->new;
+$opts->getoptions (
+	'f|format=s'      => \$SCANFORMAT,
+	'fp|firstpage=s'  => \$FIRSTPAGE,
+	'sw|spine=i'      => \$Spine_Width_Inches,
+	'scanner=s'       => \$Scanner,
+	'ps|pagesource=s' => \$PageSource,
+        'd|debug'         => sub { $::DEBUG = 1 },
+        'v|verbose=i'     => \$DIAGNOSTIC_PRINT_LEVEL,
+        'h|help'          => \$HELP,
+        'man'             => \$MAN
+);
+pod2usage(1)                            if $HELP;
+pod2usage(-exitval => 0, -verbose => 2) if $MAN;
+Fault::DebugPrinter->level ($DIAGNOSTIC_PRINT_LEVEL);
+
+#-----------------------------------------------------------------------------
+my $USAGE   = "Usage: $::{PROCESS_NAME} isodate title issuepath";
+
+if ($#ARGV != 2 ) {
+  printf STDERR "$::PROCESS_NAME: Must have a date and path, eg.\n" .
+    " $::PROCESS_NAME 20040814 Cisco-RouterManual /dma/home/amon/Scan\n" .
+      "$USAGE\n" .
+	"Terminating...\n";
+  exit 1;
+}
+my ($DATE, $PUBLICATION, $PATH) = @ARGV;
+
+#==========================================================================
+
+my $CMD_HELP   =
+"  a:  Scan the next batch of sheets without asking questions.
+   f:  Scan sheet with title of cover.
+   c:  Scan sheet with title of contents.
+   p:  Scan sheet with default blank title.
+   b:  Scan sheet with title of backcover.
+   s:  Scan the document spine.
+   1:  One page number per sheet.
+   2:  Two page numbers per sheet.
+   i:  Print information on the current job.
+   h:  Help.
+   q:  Quit.
+   x:  eXit.
+  CR: Stay in the same mode.
+";
+
+sub get_Sheet_Command {
+  my ($term,$job) = @_;
+  my ($line,$str);
+
+  if ($job->decBatchCnt > 0) {
+    my $pages = ($job->pagesPerSheet == 1) ? "page" : "pages";
+    $str = $job->guessPageTitle;
+    $str = ($str eq "") ? $pages : $str;
+    print "Autoscanning ${str} " . $job->pageid . "\n";
+    return 1;
+  }
+
+ CMD:
+  while (1) {
+    $str = $job->guessPageTitle;
+    $str = ($str eq "") ? "" : "for the $str ";
+    print "Command ${str}[a,f,c,p,b,1,2,x,q,i,h,CR] (" . 
+      $job->pageid . "): ";
+    
+    ReadMode 3; $_ = ReadKey 0; ReadMode 0;
+    { my $cmd=$_;
+      /[aA]/   && do { $job->setBatchLength ($job->totalSheets);
+		       $job->initBatchCnt;
+		       print "$cmd\n"; next CMD; };
+
+      /[fF]/   && do { $job->setPageTitle ("cover");
+		       $job->setPagesPerSheet (1);
+		       print "$cmd\n"; last;     };
+      
+      /[cC]/   && do { $job->setPageTitle ("contents");
+		       print "$cmd\n"; last;     };
+      
+      /[pP]/   && do { $job->setPageTitle ("");
+		       print "$cmd\n"; last;     };
+      
+      /[bB]/   && do { $job->setPageTitle ("backcover");
+		       $job->setPagesPerSheet (1);
+		       print "$cmd\n"; last;     };
+
+      /[sS]/   && do { $job->setPageTitle ("spine");
+		       print "$cmd\n"; last;     };
+      
+      /[1]/    && do { $job->setPagesPerSheet (1); 
+		       print "$cmd\n"; next CMD; };
+      
+      /[2]/    && do { $job->setPagesPerSheet (2);
+		       print "$cmd\n"; next CMD; };
+
+      /[iI]/   && do { print "$cmd\n"; $job->info; next CMD;};
+
+      /[xXqQ]/ && do { print "$cmd\n"; return 0;};
+      /[hH]/   && do { print "$cmd\n$CMD_HELP"; next CMD;};
+      /\n/     && do { print "\n";   last;};
+      
+      print "$cmd\n"; next CMD;
+    }
+
+    # The document spine has a special number and special handling.
+    if ( $job->isSpine ) {
+        if (!defined ($line = 
+              $term->readline("Scan the document spine [ENTER]: "))) {
+            print "\n";
+        }
+        return 1;
+    }
+
+    # I could make Gnu readline do just about anything I could do in 
+    # Emacs...
+    $str  = ($job->pageTitle eq "") ? 
+              "" : "for the " . $job->pageTitle . " ";
+    if (!defined ($line = $term->readline("Set the page number ${str}: ", 
+					  $job->pageid))) {
+       print "\n";
+       next CMD;
+    }
+    $job->setPagesPerSheetAsIn ($line);
+    return 1;
+  }
+  return 1;
+}
+
+#==========================================================================
+
+# Create a scanner object to scan the pages we select
+my $scanner = Scanner::Device->new (scanner => $Scanner, pagesource => $PageSource);
+
+Scanner::Format->setDefaultCalibratorFlag;
+Scanner::Format->defaultUnitsAre ( "inches" );
+
+my $job = Scanner::Job->new
+  ($scanner, $FIRSTPAGE,$SCANFORMAT,$Spine_Width_Inches, $Total_Sheets,
+   $PATH,$DATE,$PUBLICATION);
+
+# Set up the GNU readline. It can do just about anything you want... I 
+# could add a whole set of META and CMD keys if I desire.
+#
+my $term   = Term::ReadLine->new ($::PROCESS_NAME);
+
+while ( get_Sheet_Command ($term,$job) ) {
+  $job->scan;
+  $job->nextPageNumbers if (!$job->isSpine);
+}
+
+# This code runs on exit, whether kill'd, ctlc'd or whatever and makes sure
+# we set the keyboard mode back to something sane.
+
+END { ReadMode 0;}
+
+$scanner->shutdown;
+exit 0;
+
+#==============================================================================
+#                       Pod Documentation
+#==============================================================================
+# You may extract and format the documention section with the 'perldoc' cmd.
+
+=head1 NAME
+
+ ScanBooklet - Document scan controller program.
+
+=head1 SYNOPSIS
+
+ ScanBooklet {switches} <archivedate string> <PublicationTitle> \
+                        <Publication Directory>
+     --fp | --firstpage=str   Number for initial page of document. 
+                              Default is "001".
+     -f   | --format=str      Scan format. The default is an A4 in 
+                              Portrait: P:8.5x13
+                              First field is orientation, L or P, for 
+                              landscape or portrait.
+                              Second field is size in inches across scanner 
+                              width.
+                              Third field is size in inches down scanner 
+                              length.
+     --sw | --spine=num       Width of the document spine. Default is 1 inch.
+            --scanner=s       Scanner id: Default is "gt68xx:libusb:001:003".
+     --ps | --pagesource=s    Page source. Default is "NotApplicable."
+     -d   | --debug           Turn on internal debug code, if any.
+     -v   ! --verbose=num     Set level of diagnostic output. 0 for none.
+     -h   | --help            Print this usage information.
+            --man             Print the man page for this command.
+
+=head1 Description
+
+This is a command line scanner control program for working with documents. 
+For example, to scan the 17 July 2006 issue of New Scientist, one might 
+type:
+
+ ScanBooklet 20060717 NewScientist /path/Publications/NewScientist
+
+to create a directory containing scans of all the pages of that issue:
+
+	/path/Publications/NewScientist/20060717-NewScientist/
+
+Each page must be manually set up on the scan bed before typing commands.
+
+The commands are:
+
+   a:  Scan the next batch of sheets without asking questions.
+   f:  Scan sheet with title of cover.
+   c:  Scan sheet with title of contents.
+   p:  Scan sheet with default blank title.
+   b:  Scan sheet with title of backcover.
+   s:  Scan the document spine.
+   1:  One sheet number per scan.
+   2:  Two sheet numbers per scan.
+   i:  Print information on the current job.
+   h:  Help.
+   q:  Quit.
+   x:  eXit.
+   CR: Stay in the same mode.
+
+The selection of a sheet as front or back automatically set the next scan
+to be a single page per sheet. The assumption is that the user initialized
+sheet size was either for single page per sheet documents or if for sized 
+for two pages per sheet, the document has been laid on the scan table on 
+the right or left of the field as appropriate. The program does not change 
+the sheet size one going from one to the other. The sheet size is fixed 
+for a given document and must be able to fit the largest field required 
+during the entire document scan.
+
+Pages per sheet is limited to 1 or 2. If there are more than 2 pages in a
+scan field, use the numbers of the first and last pages in the field. You
+can even generate overlapping fields of page numbers, so long as no 
+overlapping field has the same start and end page numbers, eg "001-002", 
+"002-003", "004-005", "005-006", "003-006" would be one way to deal with 
+the pages in a 3 page foldout in a magazine.
+
+Page numbers "001" and "001-001" will both result in a filename of
+"filename-p001.jpeg".
+
+If you selected the wrong sheet type and are in the page number prompt, clear
+the line back to the prompt and hit ^d. This will return you to the sheet type
+prompt without doing anything else.
+
+A ^p uses the history list to give you the previous pages if you want to
+rescan.
+
+Valid page numbers are:
+
+	001			Will increment until 999.
+	001a			Will increment unil 001z.
+	000.spine		No incrementing.
+	001.01			Will increment until 001.99.
+	001.01a			Will increment unil 001.01z.
+
+=head1 Notes
+
+In unix you can use the program:
+
+	lsusb
+
+(as root) to help you find where a usb scanner is and to help you use the
+"hp:libusb:001:019" format.
+
+A few thus far known supported scanners and their valid page sources are:
+
+ Umax 1200	umax:/dev/scsi/host0/bus0/target6/lun0/generic
+			"NotApplicable";
+
+ Old HP's:	"hp:libusb:001:003"
+			"adf"
+			"Normal"
+
+ ScanJet 5590	"hp5590:libusb:001:003"
+			"adf" (*)
+			"Normal"
+
+ Mustek A3 USB	"gt68xx:libusb:001:003"
+			"NotApplicable"
+
+ * The SANE driver for this scanner does not properly handle page
+   feeds through the ADF. It pulls multiple pages for every single
+   page scan request. HP says it ain't there problem and the SANE
+   guy doesn't have time to work on it.
+
+=head1 Examples
+
+ # Using the default scanner and A4 page size
+ ScanBooklet 20080817 Scanner.pm-annotatedDMA /home/me/
+
+ # Specifying the scanner and page format.
+ ScanBooklet --scanner "gt68xx:lubusb:001:003" -f "L:12x17" \
+             20080817 Relativity-EinsteinEtAl /home/me/
+
+=head1 Errors and Warnings
+
+ None.
+
+=head1 KNOWN BUGS
+
+ See TODO.
+
+=head1 SEE ALSO
+
+Term::Readline, Term::Readline::Gnu, Scanner::Device, Scanner::Job
+
+=head1 AUTHOR
+
+Dale Amon <amon@vnl.com>
+
+=cut
+
+#=============================================================================
+#                                CVS HISTORY
+#=============================================================================
+# $Log: ScanBooklet,v $
+# Revision 1.3  2008-08-29 00:18:47  amon
+# Major upgrade. Added info, fixed spine bookkeeping probs and more.
+#
+# Revision 1.2  2008-08-07 01:13:25  amon
+# Move rest of TODO out of source code.
+#
+# Revision 1.1.1.1  2008-08-07 00:22:54  amon
+# Document scan management program.
+#
+# 20070512	Dale Amon <amon@islandone.org>
+#		Modularized much of the code into methods of Scanner::Jobs
+# 20060705	Dale Amon <amon@islandone.org>
+#		The PageTitle selected by the user was overwritten.
+# 20060614	Dale Amon <amon@islandone.org>
+#		Added Term::Readline::Gnu command line processing for page 
+#		numbers.
+# 20060614	Dale Amon <amon@islandone.org>
+#		Improved handling of multiple page scans; added error checking
+#		and handling for config values and file creation; fixed 
+#		relative path problem by forcing $PATH to absolute.
+# 20040819	Dale Amon <amon@islandone.org>
+#		Created.
+1;

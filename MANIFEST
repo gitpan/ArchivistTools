@@ -1,0 +1,15 @@
+MANIFEST
+Changes
+README
+COPYING
+TODO
+TODONE
+Version
+licenses/Artistic
+licenses/BSD
+licenses/LGPL-2.1
+Makefile.PL
+bin/ScanBooklet
+bin/scan
+t/load.t
+META.yml                                 Module meta-data (added by MakeMaker)

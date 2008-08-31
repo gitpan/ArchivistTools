@@ -1,0 +1,53 @@
+x Package Scanner/Job.pm
+	x may want to merge Scanner, Scanner::Page and Scanner::Job
+          into one package for simplicity
+  (Done.)
+  [DMA 20070514-20080806]
+
+x I really need a solution to the problem of supplying args
+  to this routine. Putting them on the command line will
+  lead to a very long line. May be no other choice but I
+  do not like it.
+	x SCANBOOKLET: I need a better way to change parameters than
+	  editing the file! 
+	  [DMA 20070514-20080806]
+  (I used the P:8.5x13 format style to make it much more
+   palatable. Package is now a real installed debian package.)
+  [DMA 20070514-20080806]
+
+x Requires that Term::Readline::Gnu is installed. 
+  Term::Readline will default to it if present. 
+	x What if something else is present instead that has different 
+	  features? Should I do Feature checks?
+	x SCANBOOKLET: requires libterm-readline-gnu-perl
+	  [DMA 20070514-?]
+  (I have placed it as a requirement in the debian control file and
+   the perl Makefile.PL)
+  [DMA 20070514-20080817]
+
+x Bug: I cannot handle names like "Air&Space". The chdir
+  Perl command fails on it.
+  (I have eliminated the chdir command)
+  [DMA 20070514 - 20080828]
+
+x if you select "NotAvailable" as the page source type on
+  an hp scanjst adf, it fails to replace it with "Normal"
+  the valid 'not adf' type.
+  (I have eliminated the use of any internal types. Only
+   predefined external types are allowed and they are
+   internally mapped to whatever is allowed for a supported
+   scanner.)
+  [DMA 20070514-20080828]
+
+x SCANBOOKLET: if a scan fails or you terminate before a scan,
+  the .toc and .log may not accurately reflect the final situation.
+  (I believe I have solved this, or at the very least mostly
+   solved it. The log and toc are now not written if the page
+   file does not exist.)
+  [DMA 20070514-20080828]
+
+x ARCHIVIST: Scanbooklet cannot escape to page number after
+  being set to 000.spine!
+  (I completely rewrote spine handling.)
+  [DMA 20070514-20080828]
+

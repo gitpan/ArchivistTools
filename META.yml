@@ -1,0 +1,20 @@
+--- #YAML:1.0
+name:                ArchivistTools
+version:             0.02-1
+abstract:            Bare beginnings of an Archival Document management tool suite.
+license:             ~
+author:              
+    - Dale Amon
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
+    DMA:                           0
+    Document::Directory:           0
+    Exporter:                      0
+    Fault::Logger:                 0
+    POSIX:                         0
+    Scanner::Job:                  0
+    Term::Readline::Gnu:           0
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3

@@ -1,0 +1,78 @@
+=================
+General
+
+- To do things right, I really need a libsane-perl to call upon. 
+  There does not seem to be such a beast however.
+
+=================
+ScanBooklet
+
+- Allow multiple document scanning; allow input and change of 'specs.
+	N - new document
+	S - set document specs
+  Define a default value for args.
+   Query for changes
+	date:
+	name:
+	dest:
+	format:   L:XxY
+  [DMA 20070514-?]
+
+	- I sometimes need to change the L/P setting during 
+	  scanning so it should have a default but be
+	  changeable from the CLI
+	  [DMA 20070514-?]
+
+	- add a 'j' commmand for 'job parameters' and
+	  give it sub modes to modify anything I would like
+	  to have modifiable in Document, Scanner, etc.
+	  [DMA 20080828-?]
+
+- allow argument files that can name specific magazines,
+  like NewScientist and set up the format and such.nn
+  [DMA 20070514-?]
+
+- ARCHIVES: how do I best go back and repair the .toc files
+  with missing contents and other tags?
+  [DMA 20070514-?]
+
+	- I need a simple editor that can do this. Even better
+	  if there are packages to let me do thumbnail images
+	  in a GUI.
+	  [DMA 20070514-?]
+
+	- Perhaps add an 'e' command for edit toc?
+	  [DMA 20080828-?]
+
+- Perhaps I should have a Scanner::Config.pm file to hold defaults.
+  Place it in an /etc/ directory. Or wait and have a more general
+  Archivist::Config.pm file.
+  [DMA 20080828-?]
+
+	- To do it right, it should have an installer to set the
+	  defaults according to user selections. I am not sure
+	  how to make debian scripts and Perl work together for
+	  something like this.
+	  [DMA 20080828-?]
+
+- SCANBOOKLET: it would be nice if uparrow restored the page type as well
+  as number
+  [DMA 20070514-?]
+
+- We need lots and lots of documentation for this!
+  [DMA 20070514-?]
+
+=================
+scan
+
+- It would be nice to create an X window to do this in.
+  [DMA 20040817 - ?}
+
+- I would like to set --brightness 100, but but the option shows as 'inactive'
+  and I do not know how to get it activated. Possibly some other option 
+  setting does that?
+  [DMA 20040817 - ?}
+
+	- I have temporarily lost the ability to do x and y in dpi or mm, 
+	  it is accepting only inches.
+	  [DMA 20040817 - ?}

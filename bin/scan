@@ -1,0 +1,256 @@
+#!/usr/bin/perl -w
+#================================= scan ======================================
+# Filename:            scan
+# Description          Scan a page in archive format
+# Original Author:     Dale M. Amon
+# Date:                $Date: 2008-08-29 00:20:02 $ 
+# Version:             $Revision: 1.1 $
+# License:	       LGPL 2.1, Perl Artistic or BSD
+#
+#=============================================================================
+use Getopt::Long;
+use Pod::Usage;
+
+use Fault::Delegate::Stderr;
+use Fault::DebugPrinter;
+use Fault::Logger;
+
+use Scanner::Device;
+use Scanner::Page;
+use Scanner::Format;
+
+#=============================================================================
+#                   Logging, debugging and signal handling
+#=============================================================================
+my %opts;
+$::PROCESS_NAME = "scan";
+$::DEBUG        = 0;
+
+sub done {
+  {local $SIG{'TERM'} = 'IGNORE'; kill 'TERM' => -$$;}
+  Fault::Logger->log ("Shutdown.","NOTE",'notice');
+  exit 1;
+}
+
+                Fault::DebugPrinter->new(0);
+my $delegate1 = Fault::Delegate::Stderr->new;
+my @delegates = ($delegate1);
+                 Fault::Logger->new (@delegates);
+
+$SIG{'INT'}  = \&done;
+$SIG{'TERM'} = \&done;
+
+#=============================================================================
+#                    Switch and argument handling
+#=============================================================================
+my ($HELP,$MAN,$DIAGNOSTIC_PRINT_LEVEL) = (0, 0, 0);
+
+# NOTE: USE SCANNER:CONFIG TO SET DEFAULTS
+
+# Set default switch values. dpi and scanner if left untouched will
+# take on current scanner specific default values in Scanner->new.
+#
+my ($dpi,$PageSource,$Scanner,$format) = (undef,undef,undef,undef);
+
+# Parse for switches
+my $opts  = Getopt::Long::Parser->new;
+$opts->getoptions (
+	'f|format=s'      => \$format,
+	'scanner=s'       => \$Scanner,
+	'pagesource=s'    => \$PageSource,
+	'dpi=i'           => \$dpi,
+        'd|debug'         => sub { $::DEBUG = 1 },
+        'v|verbose=i'     => \$DIAGNOSTIC_PRINT_LEVEL,
+        'h|help'          => \$HELP,
+        'man'             => \$MAN
+);
+pod2usage(1)                            if $HELP;
+pod2usage(-exitval => 0, -verbose => 2) if $MAN;
+Fault::DebugPrinter->level ($DIAGNOSTIC_PRINT_LEVEL);
+
+#-----------------------------------------------------------------------------
+my $USAGE   = "Usage: $::{PROCESS_NAME} format isodate title issuepath";
+
+if ($#ARGV < 1) {
+  printf STDERR 
+    "$::PROCESS_NAME: You must include at least the first 3 arguments, eg.\n" .
+      " $::PROCESS_NAME -f \"P:8.5x12\" 20040814 Cisco-RouterManual\n" .
+	"$USAGE\n" .
+	  "Terminating...\n";
+  exit 1;
+}
+
+# Parse for args
+my $date	= $ARGV[0];	# yyyymmdd
+my $title1	= $ARGV[1];
+
+my ($pages, $title2) = ("","");
+if (defined $ARGV[2]) {
+  $pages = "-p" . $ARGV[2];
+  if (defined $ARGV[3]) {$title2 = "-" . $ARGV[3];}
+}
+
+# THE OPTIONAL ARGS MAKE IT DIFFICULT TO ADD A PATH ON THE END
+
+#==========================================================================
+# Set defaults for x,y in inches and leave the calibrator flag off 
+# If you need the extra inch for the calibrator ruler with the image,
+# add it yourself.
+#
+Scanner::Format->defaultUnitsAre ( "inches" );
+
+# Define the scanner object
+my $scanner = Scanner::Device->new
+  (scanner => $Scanner, pagesource => $PageSource, dpi => $dpi);
+
+my $fmtobj = Scanner::Format->new ('format' => $format);
+defined $fmtobj || (die "Invalid page format\n");
+
+# Define the page object
+my $curpage = Scanner::Page->new
+  ( 'date'        => $date,
+    'title'       => "$title1$pages$title2",
+    'pageid'      => "",
+    'format'      => $fmtobj
+  );
+
+$scanner->scan ($curpage, ".");
+
+#==============================================================================
+#                       Pod Documentation
+#==============================================================================
+# You may extract and format the documention section with the 'perldoc' cmd.
+
+=head1 NAME
+
+ scan - Scan pages for archive.
+
+=head1 SYNOPSIS
+
+scan {--scanner scannername} {--pagesource normal|adf} {--dpi integer} {--format string} isodate title {pageid} {subtitle}
+
+ Options:
+  --scanner	    A USB name or other scanimage device string 
+                    like "hp:libusb:001:004 [Default=umax or ENV{'Scanner'}]
+  -f | --format=str      Scan format. The default is an A4 in 
+                              Portrait: P:8.5x13
+                              First field is orientation, L or P, for 
+                              landscape or portrait.
+                              Second field is size in inches across scanner 
+                              width.
+                              Third field is size in inches down scanner 
+                              length.
+  --pagesource      Normal or ADF [Default=Normal]
+  --dpi	num	    Set the dpi value. [Default=150 or scanner specific]
+  --debug|-d	    Set $::DEBUG switch.
+  --help|-h	    Display help and exit.
+  --man		    Display man page and exit.
+
+=over 8
+=item B<--scanner devicename>
+
+A USB name or other device name string acceptable to 
+the scanimage program, for example, "hp:libusb:001:004".
+The default is "umax" unless overridden by the $SCANNER
+environment variable.
+
+=item B<--pagesource sourcename>
+
+Set the page source. Currently ADF or Normal for the flatbed. 
+The default is Normal.
+
+=item B<--dpi num>
+
+Set the number of dots per inch. The default is 150 unless
+overriden for the Scanner type, ie 200 for an hp5590.
+
+=item B<--help or -h>
+
+Display help message and exit.
+
+=item B<--help or -h>
+
+Display man page message and exit.
+
+=back
+
+=head1 DESCRIPTION
+
+B<scan> will scan a full color page of the specified size at the 
+specified resolution from the specified page source on the 
+specified scanner. The first arg 
+is either a P or an L to specify that the page is in Portrait 
+or in Landscape format. Landscape images will be rotated 90 
+degrees clockwise; Portrait images will be left as scanned.
+The result is stored as jpeg file in a specific naming format:
+
+  <startdate>{-<enddate>}-<title>-{p<startpage>{-<endpage>}}{-subtitle}.jpeg
+
+For example:
+
+  20040812-FooGazette.jpeg
+  20040812-20040817-FooNotes.jpeg
+  20040812-FooGazette-p001.jpeg
+  20040812-FooGazette-p001-FooingForProfit.jpeg
+
+Are examples of resulting names.
+
+=head1 Examples
+
+ # Using the default scanner and A4 page size
+ scan 20080817 Scanner.pm-annotatedDMA
+
+ # Specifying the scanner and page format.
+ ScanBooklet --scanner "gt68xx:lubusb:001:003" L:12x17" \
+             20080817 Relativity-EinsteinEtAl
+
+=head1 Errors and Warnings
+
+ None.
+
+=head1 KNOWN BUGS
+
+ See TODO.
+
+=head1 SEE ALSO
+
+ScanBooklet, Scanner, Scanner::Job, Scanner::Page
+
+=head1 AUTHOR
+
+Dale Amon <amon@vnl.com>
+
+=cut
+
+#=============================================================================
+#                                CVS HISTORY
+#=============================================================================
+# $Log: scan,v $
+# Revision 1.1  2008-08-29 00:20:02  amon
+# Modified to use new API.
+#
+#
+# 20070501	Dale Amon <amon@islandone.org>
+#		Set default scanner switch value to undef because
+#		the Scanner object now uses the $SCANNER Environment
+#		variable to set the default.
+#
+# 20050710	Dale Amon <amon@islandone.org>
+#		Added scanner and pagesource options to allow use of
+#		other scanners. Did most of the rewrite to use Scanner
+#		and Scanner::Page objects.
+#
+# 20050228	Dale Amon <amon@islandone.org>
+#		I had to handle the problem caused by changes
+#		to scanimage that made resolution device dependant.
+#		We are now back to only working with UMAX.
+#
+# 20040817	Dale Amon <amon@islandone.org>
+#		Converted from unsupported 
+#		umax-cli to scanimage program, found
+#		in debian umax-utils package.
+#
+# 20000212	Dale Amon <amon@islandone.org>
+#		Created.
+#
+1;
