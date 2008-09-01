@@ -1,0 +1,164 @@
+#!/usr/bin/perl -w
+#=============================== ArchiveName =================================
+# Filename:            ArchiveName
+# Description:         Rename file to my standard format
+# Original Author:     Dale M. Amon
+# Date:                $Date: 2008-08-29 19:10:36 $
+# Version:             $Revision: 1.2 $
+# License:	       LGPL 2.1, Perl Artistic or BSD
+#
+#=============================================================================
+use strict;
+use Getopt::Long;
+use Pod::Usage;
+use Fault::Delegate::Stderr;
+use Fault::DebugPrinter;
+use Fault::Logger;
+use File::Spec::Dated
+
+#=============================================================================
+#                   Logging, debugging and signal handling
+#=============================================================================
+my %opts;
+$::PROCESS_NAME = "ArchiveName";
+$::DEBUG        = 0;
+
+sub done {
+  {local $SIG{'TERM'} = 'IGNORE'; kill 'TERM' => -$$;}
+  Fault::Logger->log ("Shutdown.","NOTE",'notice');
+  exit 1;
+}
+
+                 Fault::DebugPrinter->new(0);
+my $delegate1  = Fault::Delegate::Stderr->new;
+my @delegates = ($delegate1);
+                 Fault::Logger->new (@delegates);
+
+$SIG{'INT'}  = \&done;
+$SIG{'TERM'} = \&done;
+
+#=============================================================================
+#                    Switch and argument handling
+#=============================================================================
+my ($HELP,$MAN,$DIAGNOSTIC_PRINT_LEVEL) = (0, 0, 0);
+
+my $opts  = Getopt::Long::Parser->new;
+$opts->getoptions (
+        'd|debug'      => sub { $::DEBUG = 1 },
+        'v|verbose=i'  => \$DIAGNOSTIC_PRINT_LEVEL,
+        'h|help'       => \$HELP,
+        'man'          => \$MAN
+);
+pod2usage(1)                            if $HELP;
+pod2usage(-exitval => 0, -verbose => 2) if $MAN;
+Fault::DebugPrinter->level ($DIAGNOSTIC_PRINT_LEVEL);
+
+#-----------------------------------------------------------------------------
+if ($#ARGV != 0 ) {
+     pod2usage(-exitval => "NOEXIT", -verbose => 1);
+     printf STDERR "$::PROCESS_NAME must have a target file, eg.\n" .
+     		   "      $::PROCESS_NAME /my/undatedfilename\n" .
+                   "Terminating...\n";
+     exit 1;
+   }
+
+my ($file) = @ARGV;
+
+#=============================================================================
+#                               MAIN 
+#=============================================================================
+
+my $fs = File::Spec::Dated->new ($file);
+
+-e "$file" or Fault::ErrorHandler->die ("File $file does not exist");
+
+if (!defined $fs->dates) {
+  my @t    = (gmtime ((lstat $file)[9]))[5,4,3]; $t[0] += 1900; $t[1]++;
+  my $date = sprintf "%04d%02d%02d", @t;
+  my $src  = $fs->pathname;
+
+  $fs->set_startdate ($date);
+  $fs->reset_name;
+  $fs->reset_filename;
+  $fs->reset_pathname;
+
+  my $dst = $fs->pathname;
+  my $err = system ("mv $src $dst");
+  exit 1 if ($err != 0);
+}
+exit 0;
+
+#=============================================================================
+#                          POD DOCUMENTATION                                
+#=============================================================================
+# You may extract and format the documention section with the 'perldoc' cmd.
+
+=head1 NAME
+
+ ArchiveName - Rename a file to Archivist format.
+
+=head1 SYNOPSIS
+
+ ArchiveName <switches> <filename>
+     -d | --debug       Turn on internal debug code, if any.
+     -v ! --verbose=num Set level of diagnostic output. 0 for none.
+     -h | --help        Print this usage information.
+          --man         Print the man page for this command.
+
+Convert a file to the Archivist naming format by prepending the file's mdate 
+(the date last modified) in ISO date format:
+
+	<date>-<filename>
+
+If the filename already has a prepended date, ArchiveName will leave it alone. 
+For example, both:
+
+	ArchiveName MyTestFile
+	ArchiveName 20040901-MyTestFile
+
+will result in the target file having the name:
+
+	20040901-MyTestFile
+
+This format is quite useful as it causes archived files to collate by the date 
+at which you actually last worked on them.
+
+[It should handle lists of files; it should handle wildcards and in particular,
+entire directories when given /my/dir/* as a filename]
+
+=head1 Examples
+
+ None.
+
+=head1 Errors and Warnings
+
+ Fails if file does not exist.
+
+=head1 KNOWN BUGS
+
+ See TODO.
+
+=head1 SEE ALSO
+
+ None.
+
+=head1 AUTHOR
+
+Dale Amon <amon@vnl.com>
+
+=cut
+
+#=============================================================================
+#                                CVS HISTORY
+#=============================================================================
+# $Log: ArchiveName,v $
+# Revision 1.2  2008-08-29 19:10:36  amon
+# Rewrite of ArchiveName
+#
+# 20040902      Dale Amon <amon@islandone.org>
+#		ArchiveManager::Node is now Archivist::Node.
+#
+# 20010617      Dale Amon <amon@islandone.org>
+#               Created.
+
+1;

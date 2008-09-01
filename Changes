@@ -1,3 +1,9 @@
+archivisttools (0.02-2) unstable; urgency=low
+
+  * Added ArchiveName to the MANIFEST.
+
+ -- Dale Amon <amon@vnl.com>  Mon, 01 Sep 2008 11:36:18 +0100
+
 archivisttools (0.02-1) unstable; urgency=low
 
   * Changed package name to make it easier to expand the tool suite.

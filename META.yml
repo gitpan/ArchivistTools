@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                ArchivistTools
-version:             0.02-1
+version:             0.02-2
 abstract:            Bare beginnings of an Archival Document management tool suite.
 license:             ~
 author:              
